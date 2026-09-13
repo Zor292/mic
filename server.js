@@ -9,6 +9,8 @@ const socketServer = new WebSocketServer({ noServer: true });
 const port = Number(process.env.PORT || 3000);
 const apiKey = process.env.ROBLOX_API_KEY || "CHANGE_ME";
 const publicUrl = process.env.PUBLIC_URL || "http://localhost:3000";
+const proximityRange = 50;
+const connectionRange = 65;
 const rooms = new Map();
 const tokens = new Map();
 
@@ -56,7 +58,7 @@ function broadcast(room) {
       if (!player) continue;
       const meters = distance(me.position, player.position);
       const sameRadio = Boolean(me.radioChannel && player.radioChannel && me.radioChannel === player.radioChannel);
-      if (meters <= 50 || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, muted: Boolean(other.muted || player.muted), radio: sameRadio, radioOnly: sameRadio && meters > 50, radioTalking: Boolean(player.radioTalking), radioChannel: sameRadio ? me.radioChannel : null });
+      if (meters <= connectionRange || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, proximity: meters <= proximityRange, muted: Boolean(other.muted || player.muted), radio: sameRadio, radioOnly: sameRadio && meters > proximityRange, radioTalking: Boolean(player.radioTalking), radioChannel: sameRadio ? me.radioChannel : null });
     }
     client.send(JSON.stringify({ type: "peers", peers, self: { position: me.position, username: me.displayName, muted: Boolean(client.muted || me.muted), radioChannel: me.radioChannel || null } }));
   }
@@ -150,6 +152,17 @@ app.post("/api/roblox/radio-talk", robloxAuth, (req, res) => {
   room.updatedAt = Date.now();
   broadcast(room);
   res.json({ ok: true, talking });
+});
+
+app.post("/api/roblox/mute", robloxAuth, (req, res) => {
+  const room = rooms.get(text(req.body.roomId));
+  const userId = text(req.body.userId);
+  const player = room?.players.get(userId);
+  if (!room || !player) return res.status(404).json({ error: "Player not found" });
+  player.muted = Boolean(req.body.muted);
+  room.updatedAt = Date.now();
+  broadcast(room);
+  res.json({ ok: true, muted: player.muted });
 });
 
 app.post("/api/session/claim", (req, res) => {
