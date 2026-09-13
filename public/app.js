@@ -56,7 +56,7 @@ function openSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   state.socket = new WebSocket(`${protocol}://${location.host}/socket?token=${encodeURIComponent(state.token)}`);
   state.socket.onopen = () => { $("connectionText").textContent = "متصل"; $("voiceStatus").textContent = "يعمل"; };
-  state.socket.onmessage = event => { let message; try { message = JSON.parse(event.data); } catch { return; } if (message.type === "welcome") state.selfId = message.id; if (message.type === "peers") updatePeers(message); if (message.type === "signal") receiveSignal(message); };
+  state.socket.onmessage = event => { let message; try { message = JSON.parse(event.data); } catch { return; } if (message.type === "welcome") state.selfId = message.id; if (message.type === "peers") updatePeers(message); if (message.type === "signal") receiveSignal(message); if (message.type === "radioBeep") playRadioBeep(); };
   state.socket.onclose = () => { $("connectionText").textContent = "انقطع الاتصال"; $("voiceStatus").textContent = "متوقف"; for (const pc of state.connections.values()) pc.close(); state.connections.clear(); };
 }
 
@@ -105,7 +105,7 @@ function renderRadioMembers(peers) {
   const members = peers.filter(peer => peer.radio);
   $("radioMembersCount").textContent = `${members.length} MEMBERS`;
   if (!members.length) { list.innerHTML = '<div class="empty-state compact">لا توجد موجة نشطة</div>'; return; }
-  list.innerHTML = members.sort((a, b) => a.distance - b.distance).map(peer => `<div class="radio-member"><span class="status-dot ${peer.muted ? "muted" : ""}"></span><strong>${peer.username}</strong><small>${peer.muted ? "مكتوم" : peer.radioOnly ? "اتصال راديو" : "راديو وقرب"}</small></div>`).join("");
+  list.innerHTML = members.sort((a, b) => a.distance - b.distance).map(peer => `<div class="radio-member"><span class="status-dot ${peer.muted ? "muted" : ""}"></span><strong>${peer.username}</strong><small>${peer.muted ? "مكتوم" : peer.radioTalking ? "يتحدث الآن" : peer.radioOnly ? "على الموجة" : "راديو وقرب"}</small></div>`).join("");
 }
 
 function renderMap(peers, selfPosition) {
@@ -137,9 +137,12 @@ function applyPeerAudio(peer) {
   route.compressor.threshold.value = radio ? -25 : 0;
   route.compressor.ratio.value = radio ? 7 : 1;
   route.shaper.curve = radio ? radioCurve() : null;
-  route.gain.gain.value = radio ? state.radioVolume : Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72);
+  route.gain.gain.value = radio ? (peer.radioTalking ? state.radioVolume : 0) : Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72);
 }
 function applyOutput(audio) { if (state.outputId && typeof audio.setSinkId === "function") audio.setSinkId(state.outputId).catch(() => {}); }
+const radioBeepAudio = new Audio("https://assetdelivery.roblox.com/v1/asset/?id=8152502771");
+radioBeepAudio.volume = 0.4;
+function playRadioBeep() { radioBeepAudio.currentTime = 0; radioBeepAudio.play().catch(() => { unlockAudio(); const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); oscillator.frequency.value = 720; gain.gain.value = 0.045; oscillator.connect(gain).connect(state.audioContext.destination); oscillator.start(); oscillator.stop(state.audioContext.currentTime + 0.08); }); }
 function toggleMute() { state.muted = !state.muted; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; send({ type: "mute", muted: state.muted }); }
 function disconnect() { state.socket?.close(); state.localStream?.getTracks().forEach(track => track.stop()); location.reload(); }
 
