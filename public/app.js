@@ -81,7 +81,7 @@ function createPeer(peer, initiator) {
   state.connections.set(peer.id, pc);
   state.localStream?.getTracks().forEach(track => pc.addTrack(track, state.localStream));
   pc.onicecandidate = event => { if (event.candidate) send({ type: "signal", targetId: peer.id, payload: { candidate: event.candidate } }); };
-  pc.ontrack = event => { const audio = document.getElementById(`audio-${peer.id}`) || document.body.appendChild(Object.assign(document.createElement("audio"), { id: `audio-${peer.id}`, autoplay: true, playsInline: true })); audio.srcObject = event.streams[0]; applyOutput(audio); applyPeerAudio(state.peers.get(peer.id) || peer); audio.play().catch(() => {}); };
+  pc.ontrack = event => { const stream = event.streams[0] || new MediaStream([event.track]); createAudioRoute(peer.id, stream); applyPeerAudio(state.peers.get(peer.id) || peer); };
   pc.onconnectionstatechange = () => { if (["failed", "closed", "disconnected"].includes(pc.connectionState)) { pc.close(); state.connections.delete(peer.id); } };
   if (initiator) pc.createOffer().then(offer => pc.setLocalDescription(offer).then(() => send({ type: "signal", targetId: peer.id, payload: { description: pc.localDescription } }))).catch(() => {});
 }
@@ -117,13 +117,10 @@ function renderMap(peers, selfPosition) {
 
 function unlockAudio() { if (!state.audioContext) state.audioContext = new AudioContext(); if (state.audioContext.state === "suspended") state.audioContext.resume().catch(() => {}); }
 function radioCurve() { const curve = new Float32Array(256); for (let i = 0; i < curve.length; i++) { const x = i * 2 / curve.length - 1; const saturated = Math.tanh(x * 5.2) * 0.82; curve[i] = Math.round(saturated * 18) / 18; } return curve; }
-function applyPeerAudio(peer) {
-  const audio = document.getElementById(`audio-${peer.id}`);
-  if (!audio) return;
+function createAudioRoute(peerId, stream) {
   unlockAudio();
-  let route = state.audioRoutes.get(peer.id);
-  if (!route) {
-    const source = state.audioContext.createMediaElementSource(audio);
+  if (!state.audioRoutes.has(peerId)) {
+    const source = state.audioContext.createMediaStreamSource(stream);
     const proximityGain = state.audioContext.createGain();
     const highpass = state.audioContext.createBiquadFilter();
     const lowpass = state.audioContext.createBiquadFilter();
@@ -132,9 +129,13 @@ function applyPeerAudio(peer) {
     const radioGain = state.audioContext.createGain();
     source.connect(proximityGain).connect(state.audioContext.destination);
     source.connect(highpass).connect(lowpass).connect(compressor).connect(shaper).connect(radioGain).connect(state.audioContext.destination);
-    route = { highpass, lowpass, compressor, shaper, proximityGain, radioGain };
-    state.audioRoutes.set(peer.id, route);
+    state.audioRoutes.set(peerId, { highpass, lowpass, compressor, shaper, proximityGain, radioGain });
   }
+}
+function applyPeerAudio(peer) {
+  const route = state.audioRoutes.get(peer.id);
+  if (!route) return;
+  unlockAudio();
   const radio = Boolean(peer.radio);
   route.highpass.type = "highpass";
   route.highpass.frequency.value = radio ? 420 : 20;
@@ -156,7 +157,7 @@ function applyPeerAudio(peer) {
   route.radioGain.gain.cancelScheduledValues(now);
   route.radioGain.gain.setTargetAtTime(radioTarget, now, radioTarget > 0 ? 0.025 : 0.06);
 }
-function applyOutput(audio) { if (state.outputId && typeof audio.setSinkId === "function") audio.setSinkId(state.outputId).catch(() => {}); }
+function applyOutput() { if (state.outputId && state.audioContext && typeof state.audioContext.setSinkId === "function") state.audioContext.setSinkId(state.outputId).catch(() => {}); }
 function playRadioBeep() { unlockAudio(); const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); const now = state.audioContext.currentTime; oscillator.type = "square"; oscillator.frequency.setValueAtTime(820, now); oscillator.frequency.exponentialRampToValueAtTime(560, now + 0.09); gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.08, now + 0.006); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1); oscillator.connect(gain).connect(state.audioContext.destination); oscillator.start(now); oscillator.stop(now + 0.11); }
 function setMuted(value, notify = true) { state.muted = value === true; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; if (notify) send({ type: "mute", muted: state.muted }); }
 function toggleMute() { setMuted(!state.muted); }
@@ -167,7 +168,7 @@ $("roomCode").addEventListener("keydown", event => { if (event.key === "Enter") 
 $("micButton").addEventListener("click", toggleMute);
 $("disconnectButton").addEventListener("click", disconnect);
 $("inputDevice").addEventListener("change", startMicrophone);
-$("outputDevice").addEventListener("change", event => { state.outputId = event.target.value; document.querySelectorAll("audio").forEach(applyOutput); });
+$("outputDevice").addEventListener("change", event => { state.outputId = event.target.value; applyOutput(); });
 $("radioVolumeRange").value = Math.round(state.radioVolume * 100);
 $("radioVolumeValue").textContent = `${Math.round(state.radioVolume * 100)}%`;
 $("radioVolumeRange").addEventListener("input", event => { state.radioVolume = Number(event.target.value) / 100; localStorage.setItem("hlak_radio_volume", state.radioVolume.toString()); $("radioVolumeValue").textContent = `${event.target.value}%`; state.peers.forEach(applyPeerAudio); });
