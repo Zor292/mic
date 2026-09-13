@@ -1,4 +1,4 @@
-const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, muted: false, devices: [], outputId: "", audioContext: null, audioRoutes: new Map() };
+const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, muted: false, devices: [], outputId: "", radioVolume: Number(localStorage.getItem("hlak_radio_volume") || 0.72), audioContext: null, audioRoutes: new Map() };
 const $ = id => document.getElementById(id);
 const loginView = $("loginView");
 const appView = $("appView");
@@ -64,11 +64,13 @@ function updatePeers(message) {
   state.self = message.self;
   $("nearCount").textContent = message.peers.length;
   $("peerCount").textContent = message.peers.length;
+  $("radioChannelLabel").textContent = message.self.radioChannel ? `موجة ${message.self.radioChannel}` : "لا توجد موجة";
   const next = new Map(message.peers.map(peer => [peer.id, peer]));
   for (const peer of message.peers) { state.peers.set(peer.id, peer); if (!state.connections.has(peer.id)) createPeer(peer, state.selfId < peer.id); applyPeerAudio(peer); }
   for (const [id, pc] of state.connections) if (!next.has(id)) { pc.close(); state.connections.delete(id); state.peers.delete(id); document.getElementById(`audio-${id}`)?.remove(); state.audioRoutes.delete(id); }
   state.peers = next;
   renderPeople(message.peers);
+  renderRadioMembers(message.peers);
   renderMap(message.peers, message.self.position);
 }
 
@@ -95,7 +97,15 @@ async function receiveSignal(message) {
 function renderPeople(peers) {
   const list = $("peopleList");
   if (!peers.length) { list.innerHTML = '<div class="empty-state">لا يوجد لاعب ضمن نطاق السماع حاليًا</div>'; return; }
-  list.innerHTML = peers.sort((a, b) => a.distance - b.distance).map(peer => `<div class="person-row"><div class="person-avatar">${initials(peer.username)}</div><div><div class="person-name"><i class="status-dot ${peer.muted ? "muted" : ""}"></i>${peer.username}</div><div class="person-meta">${peer.muted ? "الميكروفون مكتوم" : peer.radio ? `موجة ${peer.radioChannel}` : "صوت قريب"}</div></div><div class="distance">${peer.radio ? "RADIO" : `${peer.distance} م`}</div><div class="meter"><i style="width:${peer.radio ? 100 : Math.max(8, 100 - peer.distance * 2)}%"></i></div></div>`).join("");
+  list.innerHTML = peers.sort((a, b) => a.distance - b.distance).map(peer => `<div class="person-row"><div class="person-avatar">${initials(peer.username)}</div><div><div class="person-name"><i class="status-dot ${peer.muted ? "muted" : ""}"></i>${peer.username}</div><div class="person-meta">${peer.muted ? "الميكروفون مكتوم" : peer.radio ? `موجة ${peer.radioChannel}` : "صوت قريب"}</div></div><div class="distance">${peer.radioOnly ? "RADIO" : `${peer.distance} م`}</div><div class="meter"><i style="width:${peer.radioOnly ? 100 : Math.max(8, 100 - peer.distance * 2)}%"></i></div></div>`).join("");
+}
+
+function renderRadioMembers(peers) {
+  const list = $("radioMemberList");
+  const members = peers.filter(peer => peer.radio);
+  $("radioMembersCount").textContent = `${members.length} MEMBERS`;
+  if (!members.length) { list.innerHTML = '<div class="empty-state compact">لا توجد موجة نشطة</div>'; return; }
+  list.innerHTML = members.sort((a, b) => a.distance - b.distance).map(peer => `<div class="radio-member"><span class="status-dot ${peer.muted ? "muted" : ""}"></span><strong>${peer.username}</strong><small>${peer.muted ? "مكتوم" : peer.radioOnly ? "اتصال راديو" : "راديو وقرب"}</small></div>`).join("");
 }
 
 function renderMap(peers, selfPosition) {
@@ -120,14 +130,14 @@ function applyPeerAudio(peer) {
     route = { filter, compressor, shaper, gain };
     state.audioRoutes.set(peer.id, route);
   }
-  const radio = Boolean(peer.radio);
+  const radio = Boolean(peer.radioOnly);
   route.filter.type = radio ? "bandpass" : "allpass";
   route.filter.frequency.value = radio ? 1500 : 1000;
   route.filter.Q.value = radio ? 0.8 : 0.1;
   route.compressor.threshold.value = radio ? -25 : 0;
   route.compressor.ratio.value = radio ? 7 : 1;
   route.shaper.curve = radio ? radioCurve() : null;
-  route.gain.gain.value = radio ? 0.72 : Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72);
+  route.gain.gain.value = radio ? state.radioVolume : Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72);
 }
 function applyOutput(audio) { if (state.outputId && typeof audio.setSinkId === "function") audio.setSinkId(state.outputId).catch(() => {}); }
 function toggleMute() { state.muted = !state.muted; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; send({ type: "mute", muted: state.muted }); }
@@ -139,5 +149,8 @@ $("micButton").addEventListener("click", toggleMute);
 $("disconnectButton").addEventListener("click", disconnect);
 $("inputDevice").addEventListener("change", startMicrophone);
 $("outputDevice").addEventListener("change", event => { state.outputId = event.target.value; document.querySelectorAll("audio").forEach(applyOutput); });
+$("radioVolumeRange").value = Math.round(state.radioVolume * 100);
+$("radioVolumeValue").textContent = `${Math.round(state.radioVolume * 100)}%`;
+$("radioVolumeRange").addEventListener("input", event => { state.radioVolume = Number(event.target.value) / 100; localStorage.setItem("hlak_radio_volume", state.radioVolume.toString()); $("radioVolumeValue").textContent = `${event.target.value}%`; state.peers.forEach(applyPeerAudio); });
 const presetCode = new URLSearchParams(location.search).get("code");
 if (presetCode) $("roomCode").value = presetCode.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
