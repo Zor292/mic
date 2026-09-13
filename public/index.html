@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoiceLink</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main id="loginView" class="auth-shell">
+    <section class="auth-card">
+      <div class="brand-mark">VL</div>
+      <p class="eyebrow">ROBLOX PROXIMITY AUDIO</p>
+      <h1>صوتك داخل اللعبة</h1>
+      <p class="muted">أدخل الرمز الظاهر في واجهة Roblox لربط المتصفح بجلسة السيرفر.</p>
+      <label for="displayName">اسم العرض</label>
+      <input id="displayName" maxlength="32" placeholder="اكتب اسمًا للعرض">
+      <label for="roomCode">رمز الربط</label>
+      <input id="roomCode" class="code-input" maxlength="12" placeholder="ABC123" autocomplete="one-time-code">
+      <button id="connectButton" class="primary">دخول إلى الجلسة</button>
+      <p id="loginStatus" class="form-status"></p>
+      <div class="security-line"><span></span><small>الدخول شكلي للعرض فقط ولا يستخدم Roblox OAuth</small><span></span></div>
+    </section>
+  </main>
+
+  <main id="appView" class="app-shell hidden">
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark">VL</div><div><strong>VoiceLink</strong><small>Proximity audio</small></div></div>
+      <div class="room-state"><i></i><span id="connectionText">متصل</span><b id="roomLabel">ROOM</b></div>
+      <button id="disconnectButton" class="ghost">خروج</button>
+    </header>
+    <section class="workspace">
+      <aside class="sidebar">
+        <div class="identity-card"><div id="avatarInitial" class="avatar">V</div><div><strong id="identityName">Player</strong><small>متصل من المتصفح</small></div><span class="online-dot"></span></div>
+        <div class="section-title"><span>الصوت</span><small id="audioState">جاهز</small></div>
+        <button id="micButton" class="control active"><span class="control-icon">MIC</span><span>الميكروفون</span><b id="micState">مفتوح</b></button>
+        <div class="device-card"><label for="inputDevice">مصدر الإدخال</label><select id="inputDevice"></select><label for="outputDevice">مخرج الصوت</label><select id="outputDevice"></select></div>
+        <div class="section-title"><span>الجلسة</span><small>50 متر</small></div>
+        <div class="tip-card"><strong>نطاق السماع</strong><p>سيتم تشغيل أصوات اللاعبين القريبين تلقائيًا، وتخف تدريجيًا كلما ابتعدوا.</p></div>
+        <div class="sidebar-footer"><span>WebRTC encrypted</span><span id="latencyLabel">-- ms</span></div>
+      </aside>
+      <section class="content">
+        <div class="content-heading"><div><p class="eyebrow">LIVE SESSION</p><h2>اللاعبون القريبون</h2><p class="muted">الموقع والاتصال الصوتي يتبعان مواقع اللاعبين في Roblox.</p></div><div class="range-pill"><span></span><strong id="nearCount">0</strong> قريب الآن</div></div>
+        <div class="dashboard-grid">
+          <section class="panel people-panel"><div class="panel-head"><h3>قائمة اللاعبين</h3><span>المسافة بالأمتار</span></div><div id="peopleList" class="people-list"><div class="empty-state">بانتظار بيانات اللاعبين من Roblox</div></div></section>
+          <section class="panel map-panel"><div class="panel-head"><h3>الخريطة النسبية</h3><span>نطاق 50 م</span></div><div id="proximityMap" class="proximity-map"><div class="map-grid"></div><div class="map-ring ring-large"></div><div class="map-ring ring-small"></div><div class="map-center"><span></span><b>أنت</b></div><div id="mapPoints"></div><div class="map-axis axis-x"></div><div class="map-axis axis-y"></div></div><div class="map-legend"><span><i class="legend-you"></i>موقعك</span><span><i class="legend-player"></i>لاعب قريب</span><span><i class="legend-muted"></i>مكتوم</span></div></section>
+        </div>
+        <section class="panel signal-panel"><div><p class="eyebrow">CONNECTION</p><h3>حالة الاتصال الصوتي</h3></div><div class="signal-metrics"><div><small>الاتصال</small><strong id="peerCount">0</strong></div><div><small>الحالة</small><strong id="voiceStatus">جاهز</strong></div><div><small>الحماية</small><strong>مشفر</strong></div></div></section>
+      </section>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
