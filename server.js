@@ -56,9 +56,17 @@ function broadcast(room) {
       if (!player) continue;
       const meters = distance(me.position, player.position);
       const sameRadio = Boolean(me.radioChannel && player.radioChannel && me.radioChannel === player.radioChannel);
-      if (meters <= 50 || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, muted: Boolean(other.muted || player.muted), radio: sameRadio, radioOnly: sameRadio && meters > 50, radioChannel: sameRadio ? me.radioChannel : null });
+      if (meters <= 50 || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, muted: Boolean(other.muted || player.muted), radio: sameRadio, radioOnly: sameRadio && meters > 50, radioTalking: Boolean(player.radioTalking), radioChannel: sameRadio ? me.radioChannel : null });
     }
     client.send(JSON.stringify({ type: "peers", peers, self: { position: me.position, username: me.displayName, muted: Boolean(client.muted || me.muted), radioChannel: me.radioChannel || null } }));
+  }
+}
+
+function broadcastRadioBeep(room, channel, speakerId) {
+  for (const client of room.clients) {
+    if (client.readyState !== 1 || client.userId === speakerId) continue;
+    const player = room.players.get(client.userId);
+    if (player?.radioChannel === channel) client.send(JSON.stringify({ type: "radioBeep" }));
   }
 }
 
@@ -79,7 +87,7 @@ app.post("/api/roblox/register", robloxAuth, (req, res) => {
   const room = getRoom(roomId);
   const old = room.players.get(userId);
   if (old?.code && old.code !== code) room.players.delete(old.code);
-  room.players.set(userId, { userId, code, displayName: text(req.body.displayName, `Player ${userId}`), position: position(req.body.position), muted: Boolean(req.body.muted), radioChannel: text(req.body.radioChannel) || null, lastSeen: Date.now() });
+  room.players.set(userId, { userId, code, displayName: text(req.body.displayName, `Player ${userId}`), position: position(req.body.position), muted: Boolean(req.body.muted), radioChannel: text(req.body.radioChannel) || null, radioTalking: false, lastSeen: Date.now() });
   room.updatedAt = Date.now();
   broadcast(room);
   res.json({ ok: true, siteUrl: publicUrl, code });
@@ -94,13 +102,16 @@ app.post("/api/roblox/heartbeat", robloxAuth, (req, res) => {
     const userId = text(item.userId);
     const code = text(item.code).toUpperCase();
     if (!userId || !/^[A-Z0-9]{6,12}$/.test(code)) continue;
-    if (!room.players.has(userId)) room.players.set(userId, { userId, code, displayName: text(item.displayName, `Player ${userId}`), position: position(item.position), muted: Boolean(item.muted), radioChannel: text(item.radioChannel) || null, lastSeen: Date.now() });
+    if (!room.players.has(userId)) room.players.set(userId, { userId, code, displayName: text(item.displayName, `Player ${userId}`), position: position(item.position), muted: Boolean(item.muted), radioChannel: text(item.radioChannel) || null, radioTalking: Boolean(item.radioTalking), lastSeen: Date.now() });
     const player = room.players.get(userId);
+    const wasTalking = Boolean(player.radioTalking);
     player.code = code;
     player.displayName = text(item.displayName, player.displayName);
     player.position = position(item.position);
     player.muted = Boolean(item.muted);
     player.radioChannel = text(item.radioChannel) || null;
+    player.radioTalking = Boolean(item.radioTalking && player.radioChannel);
+    if (!wasTalking && player.radioTalking) broadcastRadioBeep(room, player.radioChannel, userId);
     player.lastSeen = Date.now();
     seen.add(userId);
   }
