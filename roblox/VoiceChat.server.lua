@@ -4,15 +4,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local config = ReplicatedStorage:WaitForChild("VoiceLinkConfig")
-local API_BASE = config:WaitForChild("ApiBase").Value
+local event = ReplicatedStorage:WaitForChild("VoiceSessionEvent")
+local API_BASE = string.gsub(config:WaitForChild("ApiBase").Value, "/+$", "")
 local API_KEY = config:WaitForChild("ApiKey").Value
-local SITE_URL = config:WaitForChild("SiteUrl").Value
+local SITE_URL = string.gsub(config:WaitForChild("SiteUrl").Value, "/+$", "")
 local roomId = game.JobId ~= "" and game.JobId or HttpService:GenerateGUID(false)
 local sessions = {}
 local playerCodes = {}
 local muted = {}
 local radioChannels = {}
-local event = ReplicatedStorage:WaitForChild("VoiceSessionEvent")
 
 local function request(path, body)
   local ok, result = pcall(function()
@@ -23,7 +23,15 @@ local function request(path, body)
       Body = HttpService:JSONEncode(body)
     })
   end)
-  return ok and result and result.Success
+  if not ok then
+    warn("VoiceLink HTTP error: " .. tostring(result))
+    return false
+  end
+  if not result.Success then
+    warn("VoiceLink HTTP status: " .. tostring(result.StatusCode) .. " " .. tostring(result.StatusMessage))
+    return false
+  end
+  return true
 end
 
 local function makeCode()
@@ -46,12 +54,19 @@ local function register(player)
   sessions[code] = player.UserId
   playerCodes[player.UserId] = code
   muted[player.UserId] = false
-  local registered = request("/api/roblox/register", { roomId = roomId, code = code, userId = tostring(player.UserId), displayName = player.DisplayName, position = playerData(player).position, muted = false, radioChannel = nil })
   event:FireClient(player, "session", SITE_URL, code)
-  if not registered then event:FireClient(player, "error", "تعذر تسجيل الجلسة في الخادم") end
+  local registered = request("/api/roblox/register", { roomId = roomId, code = code, userId = tostring(player.UserId), displayName = player.DisplayName, position = playerData(player).position, muted = false, radioChannel = nil })
+  if registered then
+    print("VoiceLink registered: " .. player.Name)
+  else
+    event:FireClient(player, "error", "تعذر تسجيل الجلسة في الخادم")
+  end
 end
 
-Players.PlayerAdded:Connect(register)
+Players.PlayerAdded:Connect(function(player)
+  task.spawn(register, player)
+end)
+
 Players.PlayerRemoving:Connect(function(player)
   muted[player.UserId] = nil
   playerCodes[player.UserId] = nil
@@ -60,6 +75,9 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 event.OnServerEvent:Connect(function(player, action, value)
+  if action == "ready" and playerCodes[player.UserId] then
+    event:FireClient(player, "session", SITE_URL, playerCodes[player.UserId])
+  end
   if action == "mute" then muted[player.UserId] = value == true end
   if action == "radioJoin" then
     local channel = tonumber(value)
@@ -78,7 +96,7 @@ end)
 
 local elapsed = 0
 RunService.Heartbeat:Connect(function(delta)
-  elapsed += delta
+  elapsed = elapsed + delta
   if elapsed < 1 then return end
   elapsed = 0
   local players = {}
@@ -86,4 +104,6 @@ RunService.Heartbeat:Connect(function(delta)
   request("/api/roblox/heartbeat", { roomId = roomId, players = players })
 end)
 
-for _, player in ipairs(Players:GetPlayers()) do task.spawn(register, player) end
+for _, player in ipairs(Players:GetPlayers()) do
+  task.spawn(register, player)
+end
