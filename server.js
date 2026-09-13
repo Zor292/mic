@@ -60,7 +60,7 @@ function broadcast(room) {
       const sameRadio = Boolean(me.radioChannel && player.radioChannel && me.radioChannel === player.radioChannel);
       if (meters <= connectionRange || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, proximity: meters <= proximityRange, muted: Boolean(other.muted || player.muted), radio: sameRadio, radioOnly: sameRadio && meters > proximityRange, radioTalking: Boolean(player.radioTalking), radioChannel: sameRadio ? me.radioChannel : null });
     }
-    client.send(JSON.stringify({ type: "peers", peers, self: { position: me.position, username: me.displayName, muted: Boolean(client.muted || me.muted), radioChannel: me.radioChannel || null } }));
+    client.send(JSON.stringify({ type: "peers", peers, self: { position: me.position, username: me.displayName, muted: Boolean(client.muted || me.muted), radioChannel: me.radioChannel || null, radioTalking: Boolean(me.radioTalking) } }));
   }
 }
 
