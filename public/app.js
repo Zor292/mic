@@ -1,4 +1,4 @@
-const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, muted: false, devices: [], outputId: "" };
+const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, muted: false, devices: [], outputId: "", audioContext: null, audioRoutes: new Map() };
 const $ = id => document.getElementById(id);
 const loginView = $("loginView");
 const appView = $("appView");
@@ -22,6 +22,7 @@ async function connect() {
     $("identityName").textContent = displayName;
     $("avatarInitial").textContent = initials(displayName);
     $("roomLabel").textContent = data.roomId.slice(0, 8).toUpperCase();
+    unlockAudio();
     await loadDevices();
     await startMicrophone();
     openSocket();
@@ -64,8 +65,8 @@ function updatePeers(message) {
   $("nearCount").textContent = message.peers.length;
   $("peerCount").textContent = message.peers.length;
   const next = new Map(message.peers.map(peer => [peer.id, peer]));
-  for (const peer of message.peers) { state.peers.set(peer.id, peer); if (!state.connections.has(peer.id)) createPeer(peer, state.selfId < peer.id); }
-  for (const [id, pc] of state.connections) if (!next.has(id)) { pc.close(); state.connections.delete(id); state.peers.delete(id); }
+  for (const peer of message.peers) { state.peers.set(peer.id, peer); if (!state.connections.has(peer.id)) createPeer(peer, state.selfId < peer.id); applyPeerAudio(peer); }
+  for (const [id, pc] of state.connections) if (!next.has(id)) { pc.close(); state.connections.delete(id); state.peers.delete(id); document.getElementById(`audio-${id}`)?.remove(); state.audioRoutes.delete(id); }
   state.peers = next;
   renderPeople(message.peers);
   renderMap(message.peers, message.self.position);
@@ -76,7 +77,7 @@ function createPeer(peer, initiator) {
   state.connections.set(peer.id, pc);
   state.localStream?.getTracks().forEach(track => pc.addTrack(track, state.localStream));
   pc.onicecandidate = event => { if (event.candidate) send({ type: "signal", targetId: peer.id, payload: { candidate: event.candidate } }); };
-  pc.ontrack = event => { const audio = document.getElementById(`audio-${peer.id}`) || document.body.appendChild(Object.assign(document.createElement("audio"), { id: `audio-${peer.id}`, autoplay: true })); audio.srcObject = event.streams[0]; audio.volume = Math.max(0, 1 - peer.distance / 50); applyOutput(audio); };
+  pc.ontrack = event => { const audio = document.getElementById(`audio-${peer.id}`) || document.body.appendChild(Object.assign(document.createElement("audio"), { id: `audio-${peer.id}`, autoplay: true, playsInline: true })); audio.srcObject = event.streams[0]; applyOutput(audio); applyPeerAudio(state.peers.get(peer.id) || peer); audio.play().catch(() => {}); };
   pc.onconnectionstatechange = () => { if (["failed", "closed", "disconnected"].includes(pc.connectionState)) { pc.close(); state.connections.delete(peer.id); } };
   if (initiator) pc.createOffer().then(offer => pc.setLocalDescription(offer).then(() => send({ type: "signal", targetId: peer.id, payload: { description: pc.localDescription } }))).catch(() => {});
 }
@@ -94,7 +95,7 @@ async function receiveSignal(message) {
 function renderPeople(peers) {
   const list = $("peopleList");
   if (!peers.length) { list.innerHTML = '<div class="empty-state">لا يوجد لاعب ضمن نطاق السماع حاليًا</div>'; return; }
-  list.innerHTML = peers.sort((a, b) => a.distance - b.distance).map(peer => `<div class="person-row"><div class="person-avatar">${initials(peer.username)}</div><div><div class="person-name"><i class="status-dot ${peer.muted ? "muted" : ""}"></i>${peer.username}</div><div class="person-meta">${peer.muted ? "الميكروفون مكتوم" : "يتحدث من Roblox"}</div></div><div class="distance">${peer.distance} م</div><div class="meter"><i style="width:${Math.max(8, 100 - peer.distance * 2)}%"></i></div></div>`).join("");
+  list.innerHTML = peers.sort((a, b) => a.distance - b.distance).map(peer => `<div class="person-row"><div class="person-avatar">${initials(peer.username)}</div><div><div class="person-name"><i class="status-dot ${peer.muted ? "muted" : ""}"></i>${peer.username}</div><div class="person-meta">${peer.muted ? "الميكروفون مكتوم" : peer.radio ? `موجة ${peer.radioChannel}` : "صوت قريب"}</div></div><div class="distance">${peer.radio ? "RADIO" : `${peer.distance} م`}</div><div class="meter"><i style="width:${peer.radio ? 100 : Math.max(8, 100 - peer.distance * 2)}%"></i></div></div>`).join("");
 }
 
 function renderMap(peers, selfPosition) {
@@ -102,6 +103,32 @@ function renderMap(peers, selfPosition) {
   map.innerHTML = peers.map(peer => { const dx = peer.position.x - selfPosition.x; const dz = peer.position.z - selfPosition.z; const left = 50 + Math.max(-42, Math.min(42, dx / 50 * 42)); const top = 50 + Math.max(-42, Math.min(42, dz / 50 * 42)); return `<div class="map-point ${peer.muted ? "muted" : ""}" style="left:${left}%;top:${top}%"><span class="map-point-label">${peer.username}</span></div>`; }).join("");
 }
 
+function unlockAudio() { if (!state.audioContext) state.audioContext = new AudioContext(); if (state.audioContext.state === "suspended") state.audioContext.resume().catch(() => {}); }
+function radioCurve() { const curve = new Float32Array(256); for (let i = 0; i < curve.length; i++) { const x = i * 2 / curve.length - 1; curve[i] = Math.tanh(x * 2.4) * 0.75; } return curve; }
+function applyPeerAudio(peer) {
+  const audio = document.getElementById(`audio-${peer.id}`);
+  if (!audio) return;
+  unlockAudio();
+  let route = state.audioRoutes.get(peer.id);
+  if (!route) {
+    const source = state.audioContext.createMediaElementSource(audio);
+    const filter = state.audioContext.createBiquadFilter();
+    const compressor = state.audioContext.createDynamicsCompressor();
+    const shaper = state.audioContext.createWaveShaper();
+    const gain = state.audioContext.createGain();
+    source.connect(filter).connect(compressor).connect(shaper).connect(gain).connect(state.audioContext.destination);
+    route = { filter, compressor, shaper, gain };
+    state.audioRoutes.set(peer.id, route);
+  }
+  const radio = Boolean(peer.radio);
+  route.filter.type = radio ? "bandpass" : "allpass";
+  route.filter.frequency.value = radio ? 1500 : 1000;
+  route.filter.Q.value = radio ? 0.8 : 0.1;
+  route.compressor.threshold.value = radio ? -25 : 0;
+  route.compressor.ratio.value = radio ? 7 : 1;
+  route.shaper.curve = radio ? radioCurve() : null;
+  route.gain.gain.value = radio ? 0.72 : Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72);
+}
 function applyOutput(audio) { if (state.outputId && typeof audio.setSinkId === "function") audio.setSinkId(state.outputId).catch(() => {}); }
 function toggleMute() { state.muted = !state.muted; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; send({ type: "mute", muted: state.muted }); }
 function disconnect() { state.socket?.close(); state.localStream?.getTracks().forEach(track => track.stop()); location.reload(); }
