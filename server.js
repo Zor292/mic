@@ -13,9 +13,11 @@ const proximityRange = 50;
 const connectionRange = 65;
 const iceServers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }];
 try {
-  const configuredIceServers = JSON.parse(process.env.TURN_ICE_SERVERS || "[]");
+  const configuredValue = String(process.env.TURN_ICE_SERVERS || "").replace(/^TURN_ICE_SERVERS\s*=\s*/, "").trim();
+  const configuredIceServers = JSON.parse(configuredValue || "[]");
   if (Array.isArray(configuredIceServers)) iceServers.push(...configuredIceServers);
-} catch {}
+  if (!configuredIceServers.some(item => String(item?.urls || "").startsWith("turn"))) console.warn("TURN_ICE_SERVERS has no TURN entries");
+} catch { console.warn("TURN_ICE_SERVERS is not valid JSON"); }
 if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) iceServers.push({ urls: process.env.TURN_URL, username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
 const rooms = new Map();
 const tokens = new Map();
