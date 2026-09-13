@@ -116,7 +116,7 @@ function renderMap(peers, selfPosition) {
 }
 
 function unlockAudio() { if (!state.audioContext) state.audioContext = new AudioContext(); if (state.audioContext.state === "suspended") state.audioContext.resume().catch(() => {}); }
-function radioCurve() { const curve = new Float32Array(256); for (let i = 0; i < curve.length; i++) { const x = i * 2 / curve.length - 1; curve[i] = Math.tanh(x * 2.4) * 0.75; } return curve; }
+function radioCurve() { const curve = new Float32Array(256); for (let i = 0; i < curve.length; i++) { const x = i * 2 / curve.length - 1; const saturated = Math.tanh(x * 5.2) * 0.82; curve[i] = Math.round(saturated * 18) / 18; } return curve; }
 function applyPeerAudio(peer) {
   const audio = document.getElementById(`audio-${peer.id}`);
   if (!audio) return;
@@ -125,26 +125,30 @@ function applyPeerAudio(peer) {
   if (!route) {
     const source = state.audioContext.createMediaElementSource(audio);
     const proximityGain = state.audioContext.createGain();
-    const filter = state.audioContext.createBiquadFilter();
+    const highpass = state.audioContext.createBiquadFilter();
+    const lowpass = state.audioContext.createBiquadFilter();
     const compressor = state.audioContext.createDynamicsCompressor();
     const shaper = state.audioContext.createWaveShaper();
     const radioGain = state.audioContext.createGain();
     source.connect(proximityGain).connect(state.audioContext.destination);
-    source.connect(filter).connect(compressor).connect(shaper).connect(radioGain).connect(state.audioContext.destination);
-    route = { filter, compressor, shaper, proximityGain, radioGain };
+    source.connect(highpass).connect(lowpass).connect(compressor).connect(shaper).connect(radioGain).connect(state.audioContext.destination);
+    route = { highpass, lowpass, compressor, shaper, proximityGain, radioGain };
     state.audioRoutes.set(peer.id, route);
   }
   const radio = Boolean(peer.radio);
-  route.filter.type = radio ? "bandpass" : "allpass";
-  route.filter.frequency.value = radio ? 1150 : 1000;
-  route.filter.Q.value = radio ? 1.65 : 0.1;
+  route.highpass.type = "highpass";
+  route.highpass.frequency.value = radio ? 420 : 20;
+  route.highpass.Q.value = radio ? 0.9 : 0.1;
+  route.lowpass.type = "lowpass";
+  route.lowpass.frequency.value = radio ? 1850 : 20000;
+  route.lowpass.Q.value = radio ? 1.4 : 0.1;
   route.compressor.threshold.value = radio ? -38 : 0;
   route.compressor.knee.value = radio ? 4 : 30;
   route.compressor.ratio.value = radio ? 12 : 1;
   route.compressor.attack.value = radio ? 0.003 : 0.003;
   route.compressor.release.value = radio ? 0.12 : 0.25;
   route.shaper.curve = radio ? radioCurve() : null;
-  const proximityTarget = peer.distance <= 50 ? Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72) : 0;
+  const proximityTarget = peer.distance <= 50 ? Math.pow(Math.max(0, 1 - peer.distance / 50), 1.05) : 0;
   const radioTarget = radio && peer.radioTalking ? state.radioVolume : 0;
   const now = state.audioContext.currentTime;
   route.proximityGain.gain.cancelScheduledValues(now);
