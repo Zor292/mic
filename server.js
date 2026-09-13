@@ -55,7 +55,8 @@ function broadcast(room) {
       const player = room.players.get(other.userId);
       if (!player) continue;
       const meters = distance(me.position, player.position);
-      if (meters <= 50) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, muted: Boolean(other.muted || player.muted) });
+      const sameRadio = Boolean(me.radioChannel && player.radioChannel && me.radioChannel === player.radioChannel);
+      if (meters <= 50 || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, muted: Boolean(other.muted || player.muted), radio: sameRadio, radioChannel: sameRadio ? me.radioChannel : null });
     }
     client.send(JSON.stringify({ type: "peers", peers, self: { position: me.position, username: me.displayName, muted: Boolean(client.muted || me.muted) } }));
   }
@@ -78,7 +79,7 @@ app.post("/api/roblox/register", robloxAuth, (req, res) => {
   const room = getRoom(roomId);
   const old = room.players.get(userId);
   if (old?.code && old.code !== code) room.players.delete(old.code);
-  room.players.set(userId, { userId, code, displayName: text(req.body.displayName, `Player ${userId}`), position: position(req.body.position), muted: Boolean(req.body.muted), lastSeen: Date.now() });
+  room.players.set(userId, { userId, code, displayName: text(req.body.displayName, `Player ${userId}`), position: position(req.body.position), muted: Boolean(req.body.muted), radioChannel: text(req.body.radioChannel) || null, lastSeen: Date.now() });
   room.updatedAt = Date.now();
   broadcast(room);
   res.json({ ok: true, siteUrl: publicUrl, code });
@@ -93,12 +94,13 @@ app.post("/api/roblox/heartbeat", robloxAuth, (req, res) => {
     const userId = text(item.userId);
     const code = text(item.code).toUpperCase();
     if (!userId || !/^[A-Z0-9]{6,12}$/.test(code)) continue;
-    if (!room.players.has(userId)) room.players.set(userId, { userId, code, displayName: text(item.displayName, `Player ${userId}`), position: position(item.position), muted: Boolean(item.muted), lastSeen: Date.now() });
+    if (!room.players.has(userId)) room.players.set(userId, { userId, code, displayName: text(item.displayName, `Player ${userId}`), position: position(item.position), muted: Boolean(item.muted), radioChannel: text(item.radioChannel) || null, lastSeen: Date.now() });
     const player = room.players.get(userId);
     player.code = code;
     player.displayName = text(item.displayName, player.displayName);
     player.position = position(item.position);
     player.muted = Boolean(item.muted);
+    player.radioChannel = text(item.radioChannel) || null;
     player.lastSeen = Date.now();
     seen.add(userId);
   }
