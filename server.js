@@ -11,6 +11,8 @@ const apiKey = process.env.ROBLOX_API_KEY || "CHANGE_ME";
 const publicUrl = process.env.PUBLIC_URL || "http://localhost:3000";
 const proximityRange = 50;
 const connectionRange = 65;
+const iceServers = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }];
+if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) iceServers.push({ urls: process.env.TURN_URL, username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
 const rooms = new Map();
 const tokens = new Map();
 
@@ -80,6 +82,7 @@ function closePlayerClients(room, userId) {
 }
 
 app.get("/api/health", (req, res) => res.json({ ok: true, rooms: rooms.size, publicUrl }));
+app.get("/api/ice-config", (req, res) => res.json({ iceServers }));
 
 app.post("/api/roblox/register", robloxAuth, (req, res) => {
   const roomId = text(req.body.roomId);
