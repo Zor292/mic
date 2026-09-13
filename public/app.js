@@ -62,16 +62,18 @@ function openSocket() {
 
 function updatePeers(message) {
   state.self = message.self;
-  $("nearCount").textContent = message.peers.length;
-  $("peerCount").textContent = message.peers.length;
+  if (state.muted !== Boolean(message.self?.muted)) setMuted(Boolean(message.self?.muted), false);
+  const visiblePeers = message.peers.filter(peer => peer.proximity || peer.radio);
+  $("nearCount").textContent = message.peers.filter(peer => peer.proximity).length;
+  $("peerCount").textContent = visiblePeers.length;
   $("radioChannelLabel").textContent = message.self.radioChannel ? `موجة ${message.self.radioChannel}` : "لا توجد موجة";
   const next = new Map(message.peers.map(peer => [peer.id, peer]));
   for (const peer of message.peers) { state.peers.set(peer.id, peer); if (!state.connections.has(peer.id)) createPeer(peer, state.selfId < peer.id); applyPeerAudio(peer); }
   for (const [id, pc] of state.connections) if (!next.has(id)) { pc.close(); state.connections.delete(id); state.peers.delete(id); document.getElementById(`audio-${id}`)?.remove(); state.audioRoutes.delete(id); }
   state.peers = next;
-  renderPeople(message.peers);
-  renderRadioMembers(message.peers);
-  renderMap(message.peers, message.self.position);
+  renderPeople(visiblePeers);
+  renderRadioMembers(visiblePeers);
+  renderMap(visiblePeers, message.self.position);
 }
 
 function createPeer(peer, initiator) {
@@ -134,19 +136,26 @@ function applyPeerAudio(peer) {
   }
   const radio = Boolean(peer.radio);
   route.filter.type = radio ? "bandpass" : "allpass";
-  route.filter.frequency.value = radio ? 1500 : 1000;
-  route.filter.Q.value = radio ? 0.8 : 0.1;
-  route.compressor.threshold.value = radio ? -25 : 0;
-  route.compressor.ratio.value = radio ? 7 : 1;
+  route.filter.frequency.value = radio ? 1150 : 1000;
+  route.filter.Q.value = radio ? 1.65 : 0.1;
+  route.compressor.threshold.value = radio ? -38 : 0;
+  route.compressor.knee.value = radio ? 4 : 30;
+  route.compressor.ratio.value = radio ? 12 : 1;
+  route.compressor.attack.value = radio ? 0.003 : 0.003;
+  route.compressor.release.value = radio ? 0.12 : 0.25;
   route.shaper.curve = radio ? radioCurve() : null;
-  route.proximityGain.gain.value = peer.distance <= 50 ? Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72) : 0;
-  route.radioGain.gain.value = radio && peer.radioTalking ? state.radioVolume : 0;
+  const proximityTarget = peer.distance <= 50 ? Math.pow(Math.max(0, 1 - peer.distance / 50), 0.72) : 0;
+  const radioTarget = radio && peer.radioTalking ? state.radioVolume : 0;
+  const now = state.audioContext.currentTime;
+  route.proximityGain.gain.cancelScheduledValues(now);
+  route.proximityGain.gain.setTargetAtTime(proximityTarget, now, 0.1);
+  route.radioGain.gain.cancelScheduledValues(now);
+  route.radioGain.gain.setTargetAtTime(radioTarget, now, radioTarget > 0 ? 0.025 : 0.06);
 }
 function applyOutput(audio) { if (state.outputId && typeof audio.setSinkId === "function") audio.setSinkId(state.outputId).catch(() => {}); }
-const radioBeepAudio = new Audio("https://assetdelivery.roblox.com/v1/asset/?id=8152502771");
-radioBeepAudio.volume = 0.4;
-function playRadioBeep() { radioBeepAudio.currentTime = 0; radioBeepAudio.play().catch(() => { unlockAudio(); const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); oscillator.frequency.value = 720; gain.gain.value = 0.045; oscillator.connect(gain).connect(state.audioContext.destination); oscillator.start(); oscillator.stop(state.audioContext.currentTime + 0.08); }); }
-function toggleMute() { state.muted = !state.muted; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; send({ type: "mute", muted: state.muted }); }
+function playRadioBeep() { unlockAudio(); const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); const now = state.audioContext.currentTime; oscillator.type = "square"; oscillator.frequency.setValueAtTime(820, now); oscillator.frequency.exponentialRampToValueAtTime(560, now + 0.09); gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.08, now + 0.006); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1); oscillator.connect(gain).connect(state.audioContext.destination); oscillator.start(now); oscillator.stop(now + 0.11); }
+function setMuted(value, notify = true) { state.muted = value === true; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; if (notify) send({ type: "mute", muted: state.muted }); }
+function toggleMute() { setMuted(!state.muted); }
 function disconnect() { state.socket?.close(); state.localStream?.getTracks().forEach(track => track.stop()); location.reload(); }
 
 $("connectButton").addEventListener("click", connect);
