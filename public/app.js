@@ -1,4 +1,4 @@
-const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, silentTrack: null, muted: false, devices: [], outputId: "", radioVolume: Number(localStorage.getItem("hlak_radio_volume") || 0.72), audioContext: null, audioRoutes: new Map() };
+const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, silentTrack: null, muted: false, devices: [], outputId: "", radioVolume: Number(localStorage.getItem("hlak_radio_volume") || 0.72), audioContext: null, audioRoutes: new Map(), iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }] };
 const $ = id => document.getElementById(id);
 const loginView = $("loginView");
 const appView = $("appView");
@@ -23,11 +23,14 @@ async function connect() {
     $("avatarInitial").textContent = initials(displayName);
     $("roomLabel").textContent = data.roomId.slice(0, 8).toUpperCase();
     unlockAudio();
+    await loadIceServers();
     await loadDevices();
     await startMicrophone();
     openSocket();
   } catch (error) { setStatus(error.message, true); }
 }
+
+async function loadIceServers() { try { const response = await fetch("/api/ice-config", { cache: "no-store" }); if (response.ok) { const data = await response.json(); if (Array.isArray(data.iceServers) && data.iceServers.length) state.iceServers = data.iceServers; } } catch {} }
 
 async function loadDevices() {
   try { await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { $("audioState").textContent = "بدون إذن الميكروفون"; }
@@ -78,12 +81,13 @@ function updatePeers(message) {
 }
 
 function createPeer(peer, initiator) {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  const pc = new RTCPeerConnection({ iceServers: state.iceServers });
   state.connections.set(peer.id, pc);
   const sendTrack = trackForPeer(peer);
   if (sendTrack) pc.addTrack(sendTrack, new MediaStream([sendTrack]));
   pc.onicecandidate = event => { if (event.candidate) send({ type: "signal", targetId: peer.id, payload: { candidate: event.candidate } }); };
   pc.ontrack = event => { const stream = event.streams[0] || new MediaStream([event.track]); createAudioRoute(peer.id, stream); applyPeerAudio(state.peers.get(peer.id) || peer); };
+  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === "failed") { $("connectionText").textContent = "فشل اتصال الصوت"; } };
   pc.onconnectionstatechange = () => { if (["failed", "closed", "disconnected"].includes(pc.connectionState)) { pc.close(); state.connections.delete(peer.id); } };
   if (initiator) pc.createOffer().then(offer => pc.setLocalDescription(offer).then(() => send({ type: "signal", targetId: peer.id, payload: { description: pc.localDescription } }))).catch(() => {});
 }
@@ -117,7 +121,7 @@ function renderMap(peers, selfPosition) {
   map.innerHTML = peers.map(peer => { const dx = peer.position.x - selfPosition.x; const dz = peer.position.z - selfPosition.z; const left = 50 + Math.max(-42, Math.min(42, dx / 50 * 42)); const top = 50 + Math.max(-42, Math.min(42, dz / 50 * 42)); return `<div class="map-point ${peer.muted ? "muted" : ""}" style="left:${left}%;top:${top}%"><span class="map-point-label">${peer.username}</span></div>`; }).join("");
 }
 
-function unlockAudio() { if (!state.audioContext) state.audioContext = new AudioContext(); if (state.audioContext.state === "suspended") state.audioContext.resume().catch(() => {}); }
+function unlockAudio() { if (!state.audioContext) { const AudioContextClass = window.AudioContext || window.webkitAudioContext; if (!AudioContextClass) return; state.audioContext = new AudioContextClass(); } if (state.audioContext.state === "suspended") state.audioContext.resume().catch(() => {}); }
 function ensureSilentTrack() { unlockAudio(); if (state.silentTrack && state.silentTrack.readyState === "live") return state.silentTrack; const destination = state.audioContext.createMediaStreamDestination(); const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); gain.gain.value = 0; oscillator.connect(gain).connect(destination); oscillator.start(); state.silentTrack = destination.stream.getAudioTracks()[0]; return state.silentTrack; }
 function trackForPeer(peer) { const microphone = state.localStream?.getAudioTracks()[0]; if (!microphone || state.muted) return ensureSilentTrack(); if (peer?.radioOnly && !state.self?.radioTalking) return ensureSilentTrack(); return microphone; }
 function updateOutgoingTracks() { for (const [id, pc] of state.connections) { const sender = pc.getSenders().find(item => item.track?.kind === "audio" || !item.track); if (!sender) continue; const track = trackForPeer(state.peers.get(id)); sender.replaceTrack(track).catch(() => {}); } }
