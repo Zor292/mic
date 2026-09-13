@@ -1,4 +1,4 @@
-const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, muted: false, devices: [], outputId: "", radioVolume: Number(localStorage.getItem("hlak_radio_volume") || 0.72), audioContext: null, audioRoutes: new Map() };
+const state = { token: null, socket: null, selfId: null, self: null, peers: new Map(), connections: new Map(), localStream: null, silentTrack: null, muted: false, devices: [], outputId: "", radioVolume: Number(localStorage.getItem("hlak_radio_volume") || 0.72), audioContext: null, audioRoutes: new Map() };
 const $ = id => document.getElementById(id);
 const loginView = $("loginView");
 const appView = $("appView");
@@ -44,11 +44,11 @@ async function loadDevices() {
 async function startMicrophone() {
   try {
     const deviceId = $("inputDevice").value;
-    if (state.localStream) state.localStream.getTracks().forEach(track => track.stop());
-    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true });
-    state.localStream.getAudioTracks().forEach(track => track.enabled = !state.muted);
-    $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز";
-    for (const pc of state.connections.values()) { const sender = pc.getSenders().find(item => item.track?.kind === "audio"); if (sender) await sender.replaceTrack(state.localStream.getAudioTracks()[0]); }
+  if (state.localStream) state.localStream.getTracks().forEach(track => track.stop());
+  state.localStream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true });
+  state.localStream.getAudioTracks().forEach(track => track.enabled = !state.muted);
+  $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز";
+  updateOutgoingTracks();
   } catch { $("audioState").textContent = "تعذر تشغيل الميكروفون"; }
 }
 
@@ -71,6 +71,7 @@ function updatePeers(message) {
   for (const peer of message.peers) { state.peers.set(peer.id, peer); if (!state.connections.has(peer.id)) createPeer(peer, state.selfId < peer.id); applyPeerAudio(peer); }
   for (const [id, pc] of state.connections) if (!next.has(id)) { pc.close(); state.connections.delete(id); state.peers.delete(id); document.getElementById(`audio-${id}`)?.remove(); state.audioRoutes.delete(id); }
   state.peers = next;
+  updateOutgoingTracks();
   renderPeople(visiblePeers);
   renderRadioMembers(visiblePeers);
   renderMap(visiblePeers, message.self.position);
@@ -79,7 +80,8 @@ function updatePeers(message) {
 function createPeer(peer, initiator) {
   const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
   state.connections.set(peer.id, pc);
-  state.localStream?.getTracks().forEach(track => pc.addTrack(track, state.localStream));
+  const sendTrack = trackForPeer(peer);
+  if (sendTrack) pc.addTrack(sendTrack, new MediaStream([sendTrack]));
   pc.onicecandidate = event => { if (event.candidate) send({ type: "signal", targetId: peer.id, payload: { candidate: event.candidate } }); };
   pc.ontrack = event => { const stream = event.streams[0] || new MediaStream([event.track]); createAudioRoute(peer.id, stream); applyPeerAudio(state.peers.get(peer.id) || peer); };
   pc.onconnectionstatechange = () => { if (["failed", "closed", "disconnected"].includes(pc.connectionState)) { pc.close(); state.connections.delete(peer.id); } };
@@ -116,6 +118,9 @@ function renderMap(peers, selfPosition) {
 }
 
 function unlockAudio() { if (!state.audioContext) state.audioContext = new AudioContext(); if (state.audioContext.state === "suspended") state.audioContext.resume().catch(() => {}); }
+function ensureSilentTrack() { unlockAudio(); if (state.silentTrack && state.silentTrack.readyState === "live") return state.silentTrack; const destination = state.audioContext.createMediaStreamDestination(); const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); gain.gain.value = 0; oscillator.connect(gain).connect(destination); oscillator.start(); state.silentTrack = destination.stream.getAudioTracks()[0]; return state.silentTrack; }
+function trackForPeer(peer) { const microphone = state.localStream?.getAudioTracks()[0]; if (!microphone || state.muted) return ensureSilentTrack(); if (peer?.radioOnly && !state.self?.radioTalking) return ensureSilentTrack(); return microphone; }
+function updateOutgoingTracks() { for (const [id, pc] of state.connections) { const sender = pc.getSenders().find(item => item.track?.kind === "audio" || !item.track); if (!sender) continue; const track = trackForPeer(state.peers.get(id)); sender.replaceTrack(track).catch(() => {}); } }
 function radioCurve() { const curve = new Float32Array(256); for (let i = 0; i < curve.length; i++) { const x = i * 2 / curve.length - 1; const saturated = Math.tanh(x * 5.2) * 0.82; curve[i] = Math.round(saturated * 18) / 18; } return curve; }
 function createAudioRoute(peerId, stream) {
   unlockAudio();
@@ -159,7 +164,7 @@ function applyPeerAudio(peer) {
 }
 function applyOutput() { if (state.outputId && state.audioContext && typeof state.audioContext.setSinkId === "function") state.audioContext.setSinkId(state.outputId).catch(() => {}); }
 function playRadioBeep() { unlockAudio(); const oscillator = state.audioContext.createOscillator(); const gain = state.audioContext.createGain(); const now = state.audioContext.currentTime; oscillator.type = "square"; oscillator.frequency.setValueAtTime(820, now); oscillator.frequency.exponentialRampToValueAtTime(560, now + 0.09); gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.08, now + 0.006); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1); oscillator.connect(gain).connect(state.audioContext.destination); oscillator.start(now); oscillator.stop(now + 0.11); }
-function setMuted(value, notify = true) { state.muted = value === true; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; if (notify) send({ type: "mute", muted: state.muted }); }
+function setMuted(value, notify = true) { state.muted = value === true; state.localStream?.getAudioTracks().forEach(track => track.enabled = !state.muted); updateOutgoingTracks(); $("micButton").classList.toggle("active", !state.muted); $("micState").textContent = state.muted ? "مكتوم" : "مفتوح"; $("audioState").textContent = state.muted ? "الميكروفون مكتوم" : "الميكروفون جاهز"; if (notify) send({ type: "mute", muted: state.muted }); }
 function toggleMute() { setMuted(!state.muted); }
 function disconnect() { state.socket?.close(); state.localStream?.getTracks().forEach(track => track.stop()); location.reload(); }
 
