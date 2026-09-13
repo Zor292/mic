@@ -154,6 +154,19 @@ app.post("/api/roblox/radio-talk", robloxAuth, (req, res) => {
   res.json({ ok: true, talking });
 });
 
+app.post("/api/roblox/radio-state", robloxAuth, (req, res) => {
+  const room = rooms.get(text(req.body.roomId));
+  const userId = text(req.body.userId);
+  const player = room?.players.get(userId);
+  if (!room || !player) return res.status(404).json({ error: "Player not found" });
+  const channel = text(req.body.channel);
+  player.radioChannel = channel || null;
+  player.radioTalking = false;
+  room.updatedAt = Date.now();
+  broadcast(room);
+  res.json({ ok: true, channel: player.radioChannel });
+});
+
 app.post("/api/roblox/mute", robloxAuth, (req, res) => {
   const room = rooms.get(text(req.body.roomId));
   const userId = text(req.body.userId);
