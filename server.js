@@ -56,7 +56,7 @@ function broadcast(room) {
       if (!player) continue;
       const meters = distance(me.position, player.position);
       const sameRadio = Boolean(me.radioChannel && player.radioChannel && me.radioChannel === player.radioChannel);
-      if (meters <= 50 || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, muted: Boolean(other.muted || player.muted), radio: sameRadio, radioChannel: sameRadio ? me.radioChannel : null });
+      if (meters <= 50 || sameRadio) peers.push({ id: other.socketId, username: player.displayName, distance: Math.round(meters * 10) / 10, position: player.position, muted: Boolean(other.muted || player.muted), radio: sameRadio && meters > 50, radioChannel: sameRadio ? me.radioChannel : null });
     }
     client.send(JSON.stringify({ type: "peers", peers, self: { position: me.position, username: me.displayName, muted: Boolean(client.muted || me.muted) } }));
   }
