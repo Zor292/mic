@@ -1,0 +1,119 @@
+<roblox version="4">
+  <Item class="ScreenGui" referent="RBX100">
+    <Properties>
+      <string name="Name">VoiceChatGui</string>
+      <bool name="ResetOnSpawn">false</bool>
+      <int name="DisplayOrder">20</int>
+    </Properties>
+    <Item class="TextButton" referent="RBX101">
+      <Properties>
+        <string name="Name">OpenButton</string>
+        <string name="Text">MIC</string>
+        <float name="TextSize">12</float>
+        <bool name="AutoButtonColor">true</bool>
+        <Color3uint8 name="BackgroundColor3">4284901119</Color3uint8>
+        <Color3uint8 name="TextColor3">4294967295</Color3uint8>
+        <UDim2 name="Position"><XS>1</XS><XO>-96</XO><YS>0</YS><YO>24</YO></UDim2>
+        <UDim2 name="Size"><XS>0</XS><XO>72</XO><YS>0</YS><YO>36</YO></UDim2>
+      </Properties>
+    </Item>
+    <Item class="Frame" referent="RBX102">
+      <Properties>
+        <string name="Name">Panel</string>
+        <bool name="Visible">false</bool>
+        <Color3uint8 name="BackgroundColor3">4278848015</Color3uint8>
+        <Color3uint8 name="BorderColor3">4281348147</Color3uint8>
+        <UDim2 name="AnchorPoint"><XS>0.5</XS><XO>0</XO><YS>0.5</YS><YO>0</YO></UDim2>
+        <UDim2 name="Position"><XS>0.5</XS><XO>0</XO><YS>0.5</YS><YO>0</YO></UDim2>
+        <UDim2 name="Size"><XS>0</XS><XO>360</XO><YS>0</YS><YO>250</YO></UDim2>
+      </Properties>
+      <Item class="TextLabel" referent="RBX103">
+        <Properties><string name="Name">TitleLabel</string><string name="Text">VoiceLink</string><float name="TextSize">22</float><token name="TextXAlignment">1</token><Color3uint8 name="TextColor3">4294967295</Color3uint8><float name="BackgroundTransparency">1</float><UDim2 name="Position"><XS>0</XS><XO>20</XO><YS>0</YS><YO>18</YO></UDim2><UDim2 name="Size"><XS>1</XS><XO>-40</XO><YS>0</YS><YO>30</YO></UDim2></Properties>
+      </Item>
+      <Item class="TextLabel" referent="RBX104">
+        <Properties><string name="Name">SiteLabel</string><string name="Text">https://YOUR-DOMAIN.example</string><float name="TextSize">12</float><token name="TextXAlignment">1</token><Color3uint8 name="TextColor3">4287668315</Color3uint8><float name="BackgroundTransparency">1</float><UDim2 name="Position"><XS>0</XS><XO>20</XO><YS>0</YS><YO>62</YO></UDim2><UDim2 name="Size"><XS>1</XS><XO>-40</XO><YS>0</YS><YO>22</YO></UDim2></Properties>
+      </Item>
+      <Item class="TextLabel" referent="RBX105">
+        <Properties><string name="Name">CodeLabel</string><string name="Text">------</string><float name="TextSize">34</float><token name="TextXAlignment">2</token><Color3uint8 name="TextColor3">4294967295</Color3uint8><float name="BackgroundTransparency">1</float><UDim2 name="Position"><XS>0</XS><XO>20</XO><YS>0</YS><YO>92</YO></UDim2><UDim2 name="Size"><XS>1</XS><XO>-40</XO><YS>0</YS><YO>48</YO></UDim2></Properties>
+      </Item>
+      <Item class="TextLabel" referent="RBX106">
+        <Properties><string name="Name">StatusLabel</string><string name="Text">بانتظار الاتصال</string><float name="TextSize">12</float><token name="TextXAlignment">2</token><Color3uint8 name="TextColor3">4287668315</Color3uint8><float name="BackgroundTransparency">1</float><UDim2 name="Position"><XS>0</XS><XO>20</XO><YS>0</YS><YO>142</YO></UDim2><UDim2 name="Size"><XS>1</XS><XO>-40</XO><YS>0</YS><YO>24</YO></UDim2></Properties>
+      </Item>
+      <Item class="TextButton" referent="RBX107">
+        <Properties><string name="Name">WebsiteButton</string><string name="Text">فتح الموقع</string><float name="TextSize">13</float><Color3uint8 name="BackgroundColor3">4284901119</Color3uint8><Color3uint8 name="TextColor3">4294967295</Color3uint8><UDim2 name="Position"><XS>0</XS><XO>20</XO><YS>1</YS><YO>-52</YO></UDim2><UDim2 name="Size"><XS>0</XS><XO>145</XO><YS>0</YS><YO>36</YO></UDim2></Properties>
+      </Item>
+      <Item class="TextButton" referent="RBX108">
+        <Properties><string name="Name">CopyButton</string><string name="Text">إظهار الرمز</string><float name="TextSize">13</float><Color3uint8 name="BackgroundColor3">4281678627</Color3uint8><Color3uint8 name="TextColor3">4294967295</Color3uint8><UDim2 name="Position"><XS>0</XS><XO>180</XO><YS>1</YS><YO>-52</YO></UDim2><UDim2 name="Size"><XS>0</XS><XO>145</XO><YS>0</YS><YO>36</YO></UDim2></Properties>
+      </Item>
+      <Item class="TextButton" referent="RBX109">
+        <Properties><string name="Name">MuteButton</string><string name="Text">إغلاق المايك</string><float name="TextSize">12</float><Color3uint8 name="BackgroundColor3">4281678627</Color3uint8><Color3uint8 name="TextColor3">4294967295</Color3uint8><UDim2 name="Position"><XS>0</XS><XO>20</XO><YS>1</YS><YO>-96</YO></UDim2><UDim2 name="Size"><XS>0</XS><XO>145</XO><YS>0</YS><YO>32</YO></UDim2></Properties>
+      </Item>
+      <Item class="TextButton" referent="RBX110">
+        <Properties><string name="Name">CloseButton</string><string name="Text">إغلاق</string><float name="TextSize">12</float><Color3uint8 name="BackgroundColor3">4281348147</Color3uint8><Color3uint8 name="TextColor3">4294967295</Color3uint8><UDim2 name="Position"><XS>0</XS><XO>180</XO><YS>1</YS><YO>-96</YO></UDim2><UDim2 name="Size"><XS>0</XS><XO>145</XO><YS>0</YS><YO>32</YO></UDim2></Properties>
+      </Item>
+    </Item>
+    <Item class="LocalScript" referent="RBX111">
+      <Properties>
+        <string name="Name">VoiceChatClient</string>
+        <ProtectedString name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GuiService = game:GetService("GuiService")
+
+local gui = script.Parent
+local panel = gui:WaitForChild("Panel")
+local openButton = gui:WaitForChild("OpenButton")
+local closeButton = panel:WaitForChild("CloseButton")
+local websiteButton = panel:WaitForChild("WebsiteButton")
+local copyButton = panel:WaitForChild("CopyButton")
+local muteButton = panel:WaitForChild("MuteButton")
+local siteLabel = panel:WaitForChild("SiteLabel")
+local codeLabel = panel:WaitForChild("CodeLabel")
+local statusLabel = panel:WaitForChild("StatusLabel")
+local event = ReplicatedStorage:WaitForChild("VoiceSessionEvent")
+local siteUrl = ""
+local code = ""
+local muted = false
+
+local function setOpen(value)
+  panel.Visible = value
+  openButton.Visible = not value
+end
+
+openButton.Activated:Connect(function() setOpen(true) end)
+closeButton.Activated:Connect(function() setOpen(false) end)
+
+websiteButton.Activated:Connect(function()
+  if siteUrl == "" then return end
+  pcall(function() GuiService:OpenBrowserWindow(siteUrl .. "?code=" .. code) end)
+  statusLabel.Text = "افتح الرابط وأدخل الرمز الظاهر هنا"
+end)
+
+copyButton.Activated:Connect(function()
+  statusLabel.Text = "الرمز: " .. code
+end)
+
+muteButton.Activated:Connect(function()
+  muted = not muted
+  muteButton.Text = muted and "فتح المايك" or "إغلاق المايك"
+  statusLabel.Text = muted and "تم إغلاق المايك" or "تم فتح المايك"
+  event:FireServer("mute", muted)
+end)
+
+event.OnClientEvent:Connect(function(action, url, newCode)
+  if action == "error" then
+    statusLabel.Text = url
+    return
+  end
+  if action ~= "session" then return end
+  siteUrl = url
+  code = newCode
+  siteLabel.Text = url
+  codeLabel.Text = code
+  statusLabel.Text = "الجلسة جاهزة"
+end)
+
+panel.Visible = false
+openButton.Visible = true]]></ProtectedString>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>
