@@ -136,6 +136,22 @@ app.post("/api/roblox/remove", robloxAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/roblox/radio-talk", robloxAuth, (req, res) => {
+  const room = rooms.get(text(req.body.roomId));
+  const userId = text(req.body.userId);
+  const channel = text(req.body.channel);
+  const player = room?.players.get(userId);
+  if (!room || !player) return res.status(404).json({ error: "Player not found" });
+  if (!channel || player.radioChannel !== channel) return res.status(403).json({ error: "Radio channel is not active" });
+  const talking = Boolean(req.body.talking);
+  const wasTalking = Boolean(player.radioTalking);
+  player.radioTalking = talking;
+  if (!wasTalking && talking) broadcastRadioBeep(room, channel, userId);
+  room.updatedAt = Date.now();
+  broadcast(room);
+  res.json({ ok: true, talking });
+});
+
 app.post("/api/session/claim", (req, res) => {
   const code = text(req.body.code).toUpperCase();
   let found;
